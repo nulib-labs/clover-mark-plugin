@@ -1,0 +1,371 @@
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+  --bg-top: #f6f9ff;
+  --bg-bottom: #eef3ff;
+  --ink-900: #111827;
+  --ink-700: #374151;
+  --ink-500: #64748b;
+  --line-soft: #d9e2f2;
+  --line-strong: #b8c7e5;
+  --surface-strong: rgba(255, 255, 255, 0.88);
+  --surface-subtle: rgba(255, 255, 255, 0.7);
+  --accent: #1858d6;
+  --accent-strong: #1148b1;
+  --accent-soft: #d8e6ff;
+  --ring: rgba(24, 88, 214, 0.32);
+  --shadow-lg: 0 26px 70px -34px rgba(20, 50, 110, 0.45);
+  --shadow-md: 0 16px 34px -24px rgba(20, 50, 110, 0.38);
+  --radius-lg: 24px;
+  --radius-md: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  color: var(--ink-900);
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(4px);
+}
+
+body::before {
+  top: -220px;
+  left: -140px;
+  width: 560px;
+  height: 560px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 55% 55%, rgba(24, 88, 214, 0.22), rgba(24, 88, 214, 0));
+}
+
+body::after {
+  right: -180px;
+  bottom: -260px;
+  width: 620px;
+  height: 620px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 50%, rgba(97, 126, 188, 0.2), rgba(97, 126, 188, 0));
+}
+
+.clover-mark-demo {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 1.4rem 1.4rem 1.9rem;
+}
+
+.clover-mark-demo__header,
+.clover-mark-demo__panel,
+.clover-mark-demo__viewer {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: reveal-up 560ms cubic-bezier(0.2, 0.78, 0.17, 1) both;
+}
+
+.clover-mark-demo__header {
+  padding: 1.4rem 1.55rem 1.5rem;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(245, 249, 255, 0.86));
+  backdrop-filter: blur(3px);
+}
+
+.clover-mark-demo__eyebrow {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 0.71rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.clover-mark-demo__header h1 {
+  margin: 0.32rem 0 0;
+  font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: clamp(2.1rem, 1.7rem + 1.7vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.clover-mark-demo__lead {
+  margin: 0.74rem 0 0;
+  max-width: 72ch;
+  color: var(--ink-700);
+  font-size: 1.03rem;
+  line-height: 1.5;
+}
+
+.clover-mark-demo__panel {
+  margin-top: 1rem;
+  padding: 1.15rem 1.2rem 1.25rem;
+  background: var(--surface-strong);
+  animation-delay: 70ms;
+}
+
+.clover-mark-demo__field-grid {
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.clover-mark-demo__field {
+  display: grid;
+  gap: 0.44rem;
+}
+
+.clover-mark-demo__field label,
+.clover-mark-demo__manifest-form label {
+  color: var(--ink-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clover-mark-demo__field select,
+.clover-mark-demo__manifest-row input {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink-900);
+  font-family: "Space Grotesk", "Avenir Next", sans-serif;
+  font-size: 0.95rem;
+  padding: 0.53rem 0.7rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.clover-mark-demo__field select:hover,
+.clover-mark-demo__manifest-row input:hover {
+  border-color: #9eb4dc;
+}
+
+.clover-mark-demo__field select:focus-visible,
+.clover-mark-demo__manifest-row input:focus-visible,
+.clover-mark-demo__manifest-row button:focus-visible,
+.manifest-example-card button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.clover-mark-demo__manifest-form {
+  margin-top: 1.05rem;
+  display: grid;
+  gap: 0.44rem;
+}
+
+.clover-mark-demo__manifest-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.clover-mark-demo__manifest-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.clover-mark-demo__manifest-row button,
+.manifest-example-card button {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2166e8, #1858d6);
+  color: #ffffff;
+  font-family: "Space Grotesk", "Avenir Next", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.52rem 1rem;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.clover-mark-demo__manifest-row button:hover,
+.manifest-example-card button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -16px rgba(24, 88, 214, 0.7);
+  background: linear-gradient(180deg, #2b71f0, #1a5ddd);
+}
+
+.clover-mark-demo__manifest-row button:active,
+.manifest-example-card button:active {
+  transform: translateY(0);
+}
+
+.clover-mark-demo__examples {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.clover-mark-demo__examples-heading h2 {
+  margin: 0;
+  font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.46rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.clover-mark-demo__examples-heading p {
+  margin: 0.3rem 0 0;
+  color: var(--ink-500);
+  font-size: 0.95rem;
+}
+
+.manifest-example-grid {
+  margin-top: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.manifest-example-card {
+  display: grid;
+  gap: 0.58rem;
+  padding: 0.95rem 0.96rem 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: linear-gradient(160deg, #ffffff, #f7faff);
+  box-shadow: 0 14px 34px -28px rgba(16, 50, 116, 0.45);
+  animation: reveal-up 500ms cubic-bezier(0.2, 0.78, 0.17, 1) both;
+}
+
+.manifest-example-card:nth-child(1) {
+  animation-delay: 130ms;
+}
+
+.manifest-example-card:nth-child(2) {
+  animation-delay: 190ms;
+}
+
+.manifest-example-card:nth-child(3) {
+  animation-delay: 250ms;
+}
+
+.manifest-example-card--selected {
+  border-color: #87a8e9;
+  background: linear-gradient(160deg, #f4f8ff, #eaf2ff);
+  box-shadow: inset 0 0 0 1px rgba(24, 88, 214, 0.2), 0 20px 42px -30px rgba(24, 88, 214, 0.45);
+}
+
+.manifest-example-card h3 {
+  margin: 0;
+  color: #102040;
+  font-family: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.14rem;
+  font-weight: 700;
+  line-height: 1.24;
+}
+
+.manifest-example-card__source {
+  margin: 0;
+  color: var(--ink-500);
+  font-size: 0.84rem;
+  font-style: italic;
+}
+
+.manifest-example-card__description {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.manifest-example-card__url {
+  margin: 0;
+  color: #425782;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-family: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.manifest-example-card button {
+  justify-self: start;
+  padding-inline: 0.92rem;
+}
+
+.manifest-example-card--selected button {
+  background: linear-gradient(180deg, #123f98, #0f377f);
+}
+
+.clover-mark-demo__viewer {
+  margin-top: 1.1rem;
+  padding: 0.95rem;
+  background: var(--surface-subtle);
+  animation-delay: 130ms;
+}
+
+.clover-mark-demo__viewer > * {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  background: #fff;
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 920px) {
+  .clover-mark-demo {
+    padding: 1rem 0.95rem 1.2rem;
+  }
+
+  .clover-mark-demo__header,
+  .clover-mark-demo__panel,
+  .clover-mark-demo__viewer {
+    border-radius: 18px;
+  }
+
+  .clover-mark-demo__header {
+    padding: 1.1rem 1.05rem 1.2rem;
+  }
+
+  .clover-mark-demo__panel {
+    padding: 0.95rem 0.9rem 1.05rem;
+  }
+
+  .clover-mark-demo__viewer {
+    padding: 0.65rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .clover-mark-demo__manifest-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clover-mark-demo__manifest-row button {
+    width: 100%;
+  }
+}

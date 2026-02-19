@@ -1,0 +1,78 @@
+{
+  "name": "@nulib/clover-mark-plugin",
+  "version": "0.1.0",
+  "description": "Clover IIIF plugin for scholarly annotation (CloverMark) across image and audiovisual canvases.",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "vite",
+    "watch": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "keywords": [
+    "iiif",
+    "clover",
+    "samvera",
+    "react",
+    "plugin"
+  ],
+  "author": "Northwestern University Libraries",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nulib-labs/clover-mark-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nulib-labs/clover-mark-plugin/issues"
+  },
+  "homepage": "https://github.com/nulib-labs/clover-mark-plugin#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@samvera/clover-iiif": ">=3.3.8 <5",
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20"
+  },
+  "dependencies": {
+    "@annotorious/react": "^3.7.20",
+    "@iiif/helpers": "^1.5.8",
+    "hls.js": "^1.6.15",
+    "i18next": "^23.16.8",
+    "react-i18next": "^15.7.4"
+  },
+  "devDependencies": {
+    "@samvera/clover-iiif": "^3.3.8",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.0.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.4"
+  }
+}
