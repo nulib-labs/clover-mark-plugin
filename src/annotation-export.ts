@@ -370,3 +370,16 @@ export function downloadAnnotationPageExport(
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+export function downloadWebVttExport(
+  webVtt: string,
+  filename = "clover-mark-annotations.vtt",
+): void {
+  const blob = new Blob([webVtt], { type: "text/vtt;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

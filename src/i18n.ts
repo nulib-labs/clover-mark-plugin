@@ -25,8 +25,11 @@ export type AnnotationsTranslationStrings = {
   jumpToCanvas: string;
   noCanvasAvailable: string;
   exportAnnotations: string;
+  exportWebVtt: string;
   exportNoAnnotations: string;
+  exportNoWebVtt: string;
   exportSuccess: string;
+  exportWebVttSuccess: string;
   motivation: string;
   motivationUnspecified: string;
   motivationCommenting: string;
@@ -143,8 +146,11 @@ const DEFAULT_TRANSLATIONS: AnnotationsTranslationStrings = {
   jumpToCanvas: "Jump",
   noCanvasAvailable: "No canvases available",
   exportAnnotations: "Export annotations (IIIF)",
+  exportWebVtt: "Export WEBVTT",
   exportNoAnnotations: "No session annotations to export.",
+  exportNoWebVtt: "No timed WEBVTT segments are available to export.",
   exportSuccess: "Exported {{count}} annotation(s).",
+  exportWebVttSuccess: "Exported {{count}} WEBVTT cue(s).",
   motivation: "Motivation",
   motivationUnspecified: "Unspecified",
   motivationCommenting: "Commenting",
@@ -197,8 +203,8 @@ const DEFAULT_TRANSLATIONS: AnnotationsTranslationStrings = {
   sttTranscriptLabel: "Transcript",
   sttTranscriptPlaceholder: "No live transcript yet.",
   sttSaveTranscript: "Save transcript text",
-  sttTimedWordsLabel: "Timed words",
-  sttTimedWordsHint: "Edit any word or short phrase while preserving the original timestamp window.",
+  sttTimedWordsLabel: "Timed segments",
+  sttTimedWordsHint: "Edit each caption segment while preserving its original timestamp window.",
   sttSessionTime: "Session",
   sttLatency: "Latency",
   sttRtf: "RTF",
@@ -253,8 +259,11 @@ const BUILTIN_TRANSLATIONS: AnnotationsTranslationResources = {
     jumpToCanvas: "Aller",
     noCanvasAvailable: "Aucun canvas disponible",
     exportAnnotations: "Exporter les annotations (IIIF)",
+    exportWebVtt: "Exporter WEBVTT",
     exportNoAnnotations: "Aucune annotation de session à exporter.",
+    exportNoWebVtt: "Aucun segment WEBVTT horodaté à exporter.",
     exportSuccess: "{{count}} annotation(s) exportée(s).",
+    exportWebVttSuccess: "{{count}} repère(s) WEBVTT exporté(s).",
     tabLabel: "CloverMark (français)",
     motivation: "Motivation",
     motivationUnspecified: "Non précisée",
@@ -308,8 +317,8 @@ const BUILTIN_TRANSLATIONS: AnnotationsTranslationResources = {
     sttTranscriptLabel: "Transcription",
     sttTranscriptPlaceholder: "Aucune transcription en direct pour le moment.",
     sttSaveTranscript: "Enregistrer le texte transcrit",
-    sttTimedWordsLabel: "Mots horodatés",
-    sttTimedWordsHint: "Modifiez un mot ou une courte phrase tout en conservant la fenêtre temporelle d'origine.",
+    sttTimedWordsLabel: "Segments horodatés",
+    sttTimedWordsHint: "Modifiez chaque segment de sous-titre tout en conservant sa fenêtre temporelle d'origine.",
     sttSessionTime: "Session",
     sttLatency: "Latence",
     sttRtf: "RTF",
@@ -361,8 +370,11 @@ const BUILTIN_TRANSLATIONS: AnnotationsTranslationResources = {
     jumpToCanvas: "Ir",
     noCanvasAvailable: "No hay lienzos disponibles",
     exportAnnotations: "Exportar anotaciones (IIIF)",
+    exportWebVtt: "Exportar WEBVTT",
     exportNoAnnotations: "No hay anotaciones de sesión para exportar.",
+    exportNoWebVtt: "No hay segmentos WEBVTT temporizados para exportar.",
     exportSuccess: "Se exportaron {{count}} anotación(es).",
+    exportWebVttSuccess: "Se exportaron {{count}} cue(s) WEBVTT.",
     tabLabel: "CloverMark",
     motivation: "Motivación",
     motivationUnspecified: "Sin especificar",
@@ -416,8 +428,8 @@ const BUILTIN_TRANSLATIONS: AnnotationsTranslationResources = {
     sttTranscriptLabel: "Transcripción",
     sttTranscriptPlaceholder: "Aún no hay transcripción en vivo.",
     sttSaveTranscript: "Guardar texto transcrito",
-    sttTimedWordsLabel: "Palabras con marca de tiempo",
-    sttTimedWordsHint: "Edita cualquier palabra o frase corta conservando la ventana de tiempo original.",
+    sttTimedWordsLabel: "Segmentos con marca de tiempo",
+    sttTimedWordsHint: "Edita cada segmento de subtítulo conservando su ventana de tiempo original.",
     sttSessionTime: "Sesión",
     sttLatency: "Latencia",
     sttRtf: "RTF",

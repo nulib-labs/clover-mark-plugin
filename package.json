@@ -1,6 +1,6 @@
 {
   "name": "@nulib/clover-mark-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Clover IIIF plugin for scholarly annotation (CloverMark) across image and audiovisual canvases.",
   "type": "module",
   "sideEffects": false,

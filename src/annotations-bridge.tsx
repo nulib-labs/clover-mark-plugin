@@ -25,6 +25,7 @@ import {
 import { applyDefaultMotivation, getPrimaryMotivation } from "./motivation";
 import { shouldSkipSyncOnHydration } from "./hydration-sync";
 import { ANNOTATIONS_I18N_NAMESPACE } from "./i18n";
+import { isWebVttBody } from "./webvtt";
 
 type ViewerStateLike = {
   activeCanvas?: string;
@@ -41,7 +42,7 @@ type ToolName = "rectangle" | "polygon";
 
 type RuntimeAnnotation = {
   id: string;
-  bodies?: Array<{ purpose?: string; value?: string; language?: string }>;
+  bodies?: Array<{ purpose?: string; value?: string; language?: string; format?: string }>;
   motivation?: string | string[];
   target?: unknown;
 };
@@ -50,7 +51,14 @@ type RuntimeBody = {
   purpose?: string;
   value?: string;
   language?: string;
+  format?: string;
 };
+
+function normalizeLanguageValue(language: unknown): string | undefined {
+  return typeof language === "string" && language.trim().length > 0
+    ? language.trim().toLowerCase()
+    : undefined;
+}
 
 function RegisterExistingOSD({ viewer }: { viewer: unknown }) {
   const { setViewer } = React.useContext(OpenSeadragonAnnotatorContext);
@@ -199,12 +207,16 @@ function getBodyValue(
   preferredPurpose: string,
 ): string | undefined {
   const bodies = Array.isArray(annotation.bodies) ? annotation.bodies : [];
-  const purposeBody = bodies.find((body) => body?.purpose === preferredPurpose);
+  const purposeBody = bodies.find(
+    (body) => body?.purpose === preferredPurpose && !isWebVttBody(body),
+  );
   if (typeof purposeBody?.value === "string" && purposeBody.value.trim().length > 0) {
     return purposeBody.value;
   }
 
-  const firstValueBody = bodies.find((body) => typeof body?.value === "string" && body.value.trim().length > 0);
+  const firstValueBody = bodies.find(
+    (body) => typeof body?.value === "string" && body.value.trim().length > 0 && !isWebVttBody(body),
+  );
   if (typeof firstValueBody?.value === "string") {
     return firstValueBody.value;
   }
@@ -231,15 +243,16 @@ function getTranslationBodies(annotation: RuntimeAnnotation): LocalScholium["tra
       return acc;
     }
 
+    if (isWebVttBody(runtimeBody)) {
+      return acc;
+    }
+
     const value = typeof runtimeBody.value === "string" ? runtimeBody.value.trim() : "";
     if (!value) {
       return acc;
     }
 
-    const language =
-      typeof runtimeBody.language === "string" && runtimeBody.language.trim().length > 0
-        ? runtimeBody.language.trim()
-        : undefined;
+    const language = normalizeLanguageValue(runtimeBody.language);
 
     acc.push({ purpose, value, language });
     return acc;
