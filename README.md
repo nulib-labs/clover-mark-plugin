@@ -21,55 +21,122 @@ npm install @samvera/clover-iiif@latest @nulib/clover-mark-plugin
 `@samvera/clover-iiif` is a peer dependency (`>=3.3.8 <5`) so the host app controls Clover versioning.
 
 ## Screenshots
+Image canvas workflow showing drawing tools, annotation targeting, and CloverMark panel editing in one view.
 ![CloverMark Plugin screenshot](docs/images/screenshot.png)
 
+Audiovisual workflow with model loading, microphone controls, and transcription/translation editing in the CloverMark tab.
+![CloverMark transcription screenshot](docs/images/transcription.png)
 
-![CloverMark transcription gif](docs/images/clover-mark-transcription.gif)
+Word-level timestamp editing for timed transcription output while preserving each token's original time window.
+![Word-level timestamps](docs/images/word_level_timestamps.png)
 
 ## How To Use In A Clover App
 
-Register the plugin with your Clover viewer:
+Use the plugin as a named import in your React app:
 
 ```tsx
+import React, { useMemo, useState } from "react";
 import Viewer from "@samvera/clover-iiif/viewer";
+import { initCloverI18n } from "@samvera/clover-iiif/i18n";
 import { cloverMarkPlugin } from "@nulib/clover-mark-plugin";
 
-const plugins = [
-  cloverMarkPlugin({
-    id: "clover-mark",
-    defaultMotivation: "supplementing",
-    motivationOptions: ["commenting", "transcribing", "highlighting", "tagging", "supplementing"],
-    translationLanguageOptions: ["en", "fr", "es", "ht"],
-    defaultTranslationLanguage: "en",
-    enableStreamingStt: true,
-    tabLabelByLanguage: {
-      en: "CloverMark",
-      fr: "CloverMark (francais)",
-      es: "CloverMark (espanol)",
-    },
-    translations: {
-      fr: {
-        tabLabel: "CloverMark (francais)",
-      },
-      es: {
-        tabLabel: "CloverMark (espanol)",
-      },
-    },
-  }),
-];
+const MOTIVATION_OPTIONS = [
+  "commenting",
+  "highlighting",
+  "tagging",
+  "supplementing",
+] as const;
+const TRANSLATION_LANGUAGE_OPTIONS = ["en", "fr", "es", "ht", "ar"] as const;
+
+type MotivationOption = (typeof MOTIVATION_OPTIONS)[number];
+type TranslationLanguageOption = (typeof TRANSLATION_LANGUAGE_OPTIONS)[number];
 
 export function ManifestViewer({ manifestUrl }: { manifestUrl: string }) {
+  const i18n = useMemo(() => initCloverI18n(), []);
+  const [language, setLanguage] = useState("en");
+  const defaultMotivation: MotivationOption = "supplementing";
+  const defaultTranslationLanguage: TranslationLanguageOption = "en";
+
+  const plugins = useMemo(
+    () => [
+      cloverMarkPlugin({
+        id: "clover-mark",
+        defaultMotivation,
+        motivationOptions: [...MOTIVATION_OPTIONS],
+        translationLanguageOptions: [...TRANSLATION_LANGUAGE_OPTIONS],
+        defaultTranslationLanguage,
+        enableStreamingStt: true,
+        tabLabelByLanguage: {
+          en: "CloverMark",
+          es: "CloverMark",
+          fr: "CloverMark (francais)",
+        },
+        translations: {
+          es: {
+            tabLabel: "CloverMark",
+            motivationCommenting: "Comentario",
+            motivationHighlighting: "Resaltado",
+            motivationDescribing: "Descripcion",
+            motivationTranscribing: "Transcripcion",
+            motivationTranslating: "Traduccion",
+            motivationTagging: "Etiquetado",
+            motivationSupplementing: "Suplemento",
+          },
+          fr: {
+            tabLabel: "CloverMark (francais)",
+            motivationCommenting: "Commentaire",
+            motivationHighlighting: "Surlignage",
+            motivationDescribing: "Description",
+            motivationTranscribing: "Transcription",
+            motivationTranslating: "Traduction",
+            motivationTagging: "Etiquetage",
+            motivationSupplementing: "Complement",
+          },
+        },
+      }),
+    ],
+    [],
+  );
+
   return (
-    <Viewer
-      iiifContent={manifestUrl}
-      plugins={plugins}
-      options={{
-        informationPanel: { open: true },
-      }}
-    />
+    <>
+      <label htmlFor="viewer-language">Viewer language</label>
+      <select
+        id="viewer-language"
+        value={language}
+        onChange={(event) => {
+          const nextLanguage = event.target.value;
+          setLanguage(nextLanguage);
+          void i18n.changeLanguage(nextLanguage);
+        }}
+      >
+        <option value="en">English</option>
+        <option value="fr">French</option>
+        <option value="es">Spanish</option>
+      </select>
+      <Viewer
+        iiifContent={manifestUrl}
+        plugins={plugins}
+        options={{
+          informationPanel: {
+            open: true,
+            defaultTab: "clover-mark",
+          },
+          showTitle: true,
+        }}
+      />
+    </>
   );
 }
 ```
+
+`cloverMarkPlugin` is a named export. Use:
+
+```tsx
+import { cloverMarkPlugin } from "@nulib/clover-mark-plugin";
+```
+
+Do not use a default import (`import cloverMarkPlugin from ...`).
 
 Plugin options:
 
