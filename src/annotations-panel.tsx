@@ -12,6 +12,7 @@ import {
 import {
   buildAnnotationPageExport,
   downloadAnnotationPageExport,
+  downloadWebVttExport,
 } from "./annotation-export";
 import { getPrimaryMotivation } from "./motivation";
 import { buildTemporalTarget, createMediaCanvasAnnotator } from "./media-annotator";
@@ -27,6 +28,12 @@ import {
   SmartProgressiveStreamingHandler,
   ViewerAudioRecorder,
 } from "./stt-streaming";
+import {
+  isWebVttBody,
+  parseWebVttCues,
+  segmentWordsIntoWebVttCues,
+  serializeWebVttCues,
+} from "./webvtt";
 
 type CanvasLike = {
   id: string;
@@ -168,6 +175,12 @@ function updateBodyValue(
   bodies.push(nextBody);
 }
 
+function normalizeLanguageValue(language: unknown): string | undefined {
+  return typeof language === "string" && language.trim().length > 0
+    ? language.trim().toLowerCase()
+    : undefined;
+}
+
 function getTranslationBodies(
   bodies: Array<{ purpose?: string; value?: string; language?: string; [key: string]: unknown }>,
 ): Array<{ purpose: "supplementing" | "translating"; value: string; language?: string }> {
@@ -184,15 +197,16 @@ function getTranslationBodies(
       return acc;
     }
 
+    if (isWebVttBody(body)) {
+      return acc;
+    }
+
     const value = typeof body.value === "string" ? body.value.trim() : "";
     if (!value) {
       return acc;
     }
 
-    const language =
-      typeof body.language === "string" && body.language.trim().length > 0
-        ? body.language.trim()
-        : undefined;
+    const language = normalizeLanguageValue(body.language);
 
     acc.push({ purpose, value, language });
     return acc;
@@ -215,7 +229,7 @@ function replaceSupplementingBodies(
   translations: Array<{ value: string; language?: string }>,
 ) {
   const preserved = bodies.filter(
-    (body) => body.purpose !== "supplementing",
+    (body) => body.purpose !== "supplementing" || isWebVttBody(body),
   );
 
   const normalizedTranslations = translations
@@ -225,10 +239,7 @@ function replaceSupplementingBodies(
         return undefined;
       }
 
-      const language =
-        typeof translation.language === "string" && translation.language.trim().length > 0
-          ? translation.language.trim()
-          : undefined;
+      const language = normalizeLanguageValue(translation.language);
 
       return {
         type: "TextualBody",
@@ -254,6 +265,9 @@ function replaceSupplementingBodies(
 const STT_TIMED_WORDS_SCHEMA = "clover.parakeet.word_timestamps.v1";
 const STT_TIMED_WORDS_BODY_PURPOSE = "describing";
 const STT_TIMED_WORDS_BODY_FORMAT = "application/json";
+const WEBVTT_BODY_FORMAT = "text/vtt";
+
+type TimedTranscriptStorage = "json" | "vtt";
 
 type TimedTranscriptWord = {
   text: string;
@@ -267,6 +281,8 @@ type TimedTranscriptPayload = {
   language?: string;
   words: TimedTranscriptWord[];
 };
+
+type RemoteWebVttPayloadById = Record<string, TimedTranscriptPayload | null>;
 
 function getAnnotationBodies(
   annotation: Partial<{ bodies?: AnnotationBody[]; body?: unknown }>,
@@ -494,9 +510,7 @@ function parseTimedTranscriptPayload(rawValue: string): TimedTranscriptPayload |
       return null;
     }
 
-    const language = typeof parsed.language === "string" && parsed.language.trim().length > 0
-      ? parsed.language.trim().toLowerCase()
-      : undefined;
+    const language = normalizeLanguageValue(parsed.language);
 
     return {
       schema: STT_TIMED_WORDS_SCHEMA,
@@ -508,24 +522,74 @@ function parseTimedTranscriptPayload(rawValue: string): TimedTranscriptPayload |
   }
 }
 
+function parseWebVttPayload(rawValue: string, language: unknown): TimedTranscriptPayload | null {
+  const cues = parseWebVttCues(rawValue);
+  if (cues.length === 0) {
+    return null;
+  }
+
+  const words = normalizeTimedTranscriptWords(
+    cues.map((cue) => ({
+      text: cue.text,
+      start_time: cue.start_time,
+      end_time: cue.end_time,
+    })),
+  );
+  if (words.length === 0) {
+    return null;
+  }
+
+  const normalizedLanguage = normalizeLanguageValue(language);
+  return {
+    schema: STT_TIMED_WORDS_SCHEMA,
+    ...(normalizedLanguage ? { language: normalizedLanguage } : {}),
+    words,
+  };
+}
+
 function getTimedTranscriptPayload(
   bodies: AnnotationBody[],
-): { payload: TimedTranscriptPayload; index: number } | null {
+  remoteWebVttByBodyId?: RemoteWebVttPayloadById,
+): { payload: TimedTranscriptPayload; index: number; storage: TimedTranscriptStorage } | null {
   for (let index = 0; index < bodies.length; index += 1) {
     const body = bodies[index];
-    if (body?.purpose !== STT_TIMED_WORDS_BODY_PURPOSE) {
+    if (!body || typeof body !== "object") {
       continue;
     }
+
     const format = typeof body.format === "string" ? body.format.toLowerCase() : "";
-    if (!format.includes("json")) {
-      continue;
+    const value = typeof body.value === "string" ? body.value : "";
+
+    if (body.purpose === STT_TIMED_WORDS_BODY_PURPOSE && format.includes("json") && value.trim().length > 0) {
+      const payload = parseTimedTranscriptPayload(value);
+      if (payload) {
+        return { payload, index, storage: "json" };
+      }
     }
-    if (typeof body.value !== "string") {
-      continue;
-    }
-    const payload = parseTimedTranscriptPayload(body.value);
-    if (payload) {
-      return { payload, index };
+
+    if (isWebVttBody(body)) {
+      if (value.trim().length > 0) {
+        const payload = parseWebVttPayload(value, body.language);
+        if (payload) {
+          return { payload, index, storage: "vtt" };
+        }
+      }
+
+      const bodyId = typeof body.id === "string" ? body.id.trim() : "";
+      if (bodyId && remoteWebVttByBodyId) {
+        const remotePayload = remoteWebVttByBodyId[bodyId];
+        if (remotePayload) {
+          const normalizedLanguage = normalizeLanguageValue(body.language);
+          return {
+            payload: {
+              ...remotePayload,
+              ...(normalizedLanguage ? { language: normalizedLanguage } : {}),
+            },
+            index,
+            storage: "vtt",
+          };
+        }
+      }
     }
   }
 
@@ -544,17 +608,33 @@ function upsertTimedTranscriptPayloadBody(
     return bodies.filter((_, bodyIndex) => bodyIndex !== timed.index);
   }
 
+  const normalizedLanguage = normalizeLanguageValue(payload.language);
   const normalizedPayload: TimedTranscriptPayload = {
     schema: STT_TIMED_WORDS_SCHEMA,
-    ...(payload.language ? { language: payload.language.trim().toLowerCase() } : {}),
+    ...(normalizedLanguage ? { language: normalizedLanguage } : {}),
     words: payload.words,
   };
-  const timedBody: AnnotationBody = {
-    type: "TextualBody",
-    purpose: STT_TIMED_WORDS_BODY_PURPOSE,
-    format: STT_TIMED_WORDS_BODY_FORMAT,
-    value: JSON.stringify(normalizedPayload),
-  };
+  const existingPurposeCandidate = timed ? bodies[timed.index]?.purpose : undefined;
+  const existingPurpose = typeof existingPurposeCandidate === "string"
+    && existingPurposeCandidate.trim().length > 0
+    ? existingPurposeCandidate
+    : STT_TIMED_WORDS_BODY_PURPOSE;
+  const timedBody: AnnotationBody = timed?.storage === "vtt"
+    ? {
+      type: "TextualBody",
+      purpose: existingPurpose,
+      format: WEBVTT_BODY_FORMAT,
+      value: serializeWebVttCues(
+        segmentWordsIntoWebVttCues(normalizedPayload.words),
+      ),
+      ...(normalizedPayload.language ? { language: normalizedPayload.language } : {}),
+    }
+    : {
+      type: "TextualBody",
+      purpose: STT_TIMED_WORDS_BODY_PURPOSE,
+      format: STT_TIMED_WORDS_BODY_FORMAT,
+      value: JSON.stringify(normalizedPayload),
+    };
 
   if (!timed) {
     return [...bodies, timedBody];
@@ -1388,6 +1468,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
   const isAvCanvas = mediaType === "audio" || mediaType === "video" || hasViewerMedia;
   const runtime = useCanvasRuntimeState(activeCanvasId);
   const [exportMessage, setExportMessage] = React.useState("");
+  const [remoteWebVttByBodyId, setRemoteWebVttByBodyId] = React.useState<RemoteWebVttPayloadById>({});
   const [translationDraftByAnnotation, setTranslationDraftByAnnotation] = React.useState<
     Record<string, { language: string; value: string }>
   >({});
@@ -2537,11 +2618,91 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     setSttMetrics(null);
     setSttStatus("");
     setSttRecordingAnnotationId(null);
+    setRemoteWebVttByBodyId({});
   }, [activeCanvasId]);
 
+  React.useEffect(() => {
+    if (!annotator || runtime.localCloverMarks.length === 0) {
+      return;
+    }
+
+    const pending = new Map<string, string | undefined>();
+    for (const scholium of runtime.localCloverMarks) {
+      const annotation = annotator.getAnnotationById(scholium.id) as
+        | { bodies?: AnnotationBody[]; body?: unknown; target?: unknown }
+        | undefined;
+      if (!annotation) {
+        continue;
+      }
+
+      const bodies = getAnnotationBodies(annotation);
+      for (const body of bodies) {
+        if (!isWebVttBody(body)) {
+          continue;
+        }
+
+        const hasInlineValue = typeof body.value === "string" && body.value.trim().length > 0;
+        if (hasInlineValue) {
+          continue;
+        }
+
+        const bodyId = typeof body.id === "string" ? body.id.trim() : "";
+        if (!bodyId) {
+          continue;
+        }
+        if (Object.prototype.hasOwnProperty.call(remoteWebVttByBodyId, bodyId)) {
+          continue;
+        }
+
+        pending.set(bodyId, normalizeLanguageValue(body.language));
+      }
+    }
+
+    if (pending.size === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const loaded: RemoteWebVttPayloadById = {};
+      for (const [bodyId, language] of pending.entries()) {
+        try {
+          const response = await fetch(bodyId, {
+            redirect: "follow",
+            headers: {
+              Accept: "text/vtt, text/plain, */*",
+            },
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to load VTT (${response.status})`);
+          }
+
+          const text = await response.text();
+          loaded[bodyId] = parseWebVttPayload(text, language) ?? null;
+        } catch (error) {
+          console.error("Failed to load remote WEBVTT body", bodyId, error);
+          loaded[bodyId] = null;
+        }
+      }
+
+      if (cancelled || Object.keys(loaded).length === 0) {
+        return;
+      }
+
+      setRemoteWebVttByBodyId((current) => ({
+        ...current,
+        ...loaded,
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [annotator, remoteWebVttByBodyId, runtime.localCloverMarks]);
+
   const handleExportAnnotations = React.useCallback(() => {
-    const storedByCanvasId = getAllStoredCanvasAnnotations();
-    const totalAnnotations = Object.values(storedByCanvasId).reduce(
+    const storedByCanvasIdForExport = getAllStoredCanvasAnnotations();
+    const totalAnnotations = Object.values(storedByCanvasIdForExport).reduce(
       (total, annotations) => total + annotations.length,
       0,
     );
@@ -2554,7 +2715,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     const annotationPage = buildAnnotationPageExport({
       manifestId: viewerState.activeManifest,
       canvasOrder: exportCanvasOrder,
-      storedByCanvasId,
+      storedByCanvasId: storedByCanvasIdForExport,
     });
 
     downloadAnnotationPageExport(annotationPage);
@@ -2776,7 +2937,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
         continue;
       }
       const bodies = getAnnotationBodies(annotation);
-      const timedTranscript = getTimedTranscriptPayload(bodies);
+      const timedTranscript = getTimedTranscriptPayload(bodies, remoteWebVttByBodyId);
       if (timedTranscript) {
         result[scholium.id] = timedTranscript.payload;
         continue;
@@ -2807,7 +2968,36 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     }
 
     return result;
-  }, [annotator, runtime.localCloverMarks]);
+  }, [annotator, remoteWebVttByBodyId, runtime.localCloverMarks]);
+
+  const totalStoredAnnotationCountForExport = Object.values(
+    getAllStoredCanvasAnnotations(),
+  ).reduce((total, annotations) => total + annotations.length, 0);
+  const hasAnnotationsToExport = totalStoredAnnotationCountForExport > 0;
+
+  const exportableWebVttCues = React.useMemo(
+    () =>
+      runtime.localCloverMarks.flatMap((scholium) => {
+        const timedTranscript = timedTranscriptByAnnotation[scholium.id];
+        if (!timedTranscript || timedTranscript.words.length === 0) {
+          return [];
+        }
+
+        return segmentWordsIntoWebVttCues(timedTranscript.words);
+      }),
+    [runtime.localCloverMarks, timedTranscriptByAnnotation],
+  );
+  const hasWebVttToExport = exportableWebVttCues.length > 0;
+
+  const handleExportWebVtt = React.useCallback(() => {
+    if (exportableWebVttCues.length === 0) {
+      setExportMessage(t("exportNoWebVtt"));
+      return;
+    }
+
+    downloadWebVttExport(serializeWebVttCues(exportableWebVttCues));
+    setExportMessage(t("exportWebVttSuccess", { count: exportableWebVttCues.length }));
+  }, [exportableWebVttCues, t]);
 
   const handleUpdateTimedTranscriptWord = React.useCallback(
     (annotationId: string, wordIndex: number, nextValue: string) => {
@@ -2828,7 +3018,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
       }
 
       const existingBodies = getAnnotationBodies(annotation);
-      const timed = getTimedTranscriptPayload(existingBodies)
+      const timed = getTimedTranscriptPayload(existingBodies, remoteWebVttByBodyId)
         ?? (() => {
           const approximate = buildApproximateTimedPayloadFromAnnotation(annotation);
           if (!approximate) {
@@ -2902,7 +3092,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
         bodies: nextBodies,
       });
     },
-    [annotator, normalizedDefaultTranslationLanguage],
+    [annotator, normalizedDefaultTranslationLanguage, remoteWebVttByBodyId],
   );
 
   const handleSeekToTimedWord = React.useCallback(
@@ -3001,8 +3191,19 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
         ) : null}
       </div>
       <section style={{ display: "grid", gap: "0.5rem" }}>
-        <button type="button" onClick={handleExportAnnotations}>
+        <button
+          type="button"
+          onClick={handleExportAnnotations}
+          disabled={!hasAnnotationsToExport}
+        >
           {t("exportAnnotations")}
+        </button>
+        <button
+          type="button"
+          onClick={handleExportWebVtt}
+          disabled={!hasWebVttToExport}
+        >
+          {t("exportWebVtt")}
         </button>
         {exportMessage ? (
           <p style={{ margin: 0, fontSize: "0.85rem" }}>{exportMessage}</p>

@@ -9,6 +9,7 @@ import {
   setStoredCanvasAnnotations,
 } from "./annotation-runtime";
 import { applyDefaultMotivation, getPrimaryMotivation } from "./motivation";
+import { isWebVttBody } from "./webvtt";
 
 type RuntimeBody = {
   purpose?: string;
@@ -61,13 +62,15 @@ function buildAnnotationId(): string {
 
 function getBodyValue(annotation: RuntimeAnnotation, preferredPurpose: string): string | undefined {
   const bodies = Array.isArray(annotation.bodies) ? annotation.bodies : [];
-  const purposeBody = bodies.find((body) => body?.purpose === preferredPurpose);
+  const purposeBody = bodies.find(
+    (body) => body?.purpose === preferredPurpose && !isWebVttBody(body),
+  );
   if (typeof purposeBody?.value === "string" && purposeBody.value.trim().length > 0) {
     return purposeBody.value;
   }
 
   const firstValueBody = bodies.find(
-    (body) => typeof body?.value === "string" && body.value.trim().length > 0,
+    (body) => typeof body?.value === "string" && body.value.trim().length > 0 && !isWebVttBody(body),
   );
   if (typeof firstValueBody?.value === "string") {
     return firstValueBody.value;
@@ -94,6 +97,10 @@ function getTranslationBodies(annotation: RuntimeAnnotation): LocalScholium["tra
       return acc;
     }
 
+    if (isWebVttBody(body)) {
+      return acc;
+    }
+
     const value = typeof body.value === "string" ? body.value.trim() : "";
     if (!value) {
       return acc;
@@ -101,7 +108,7 @@ function getTranslationBodies(annotation: RuntimeAnnotation): LocalScholium["tra
 
     const language =
       typeof body.language === "string" && body.language.trim().length > 0
-        ? body.language.trim()
+        ? body.language.trim().toLowerCase()
         : undefined;
 
     acc.push({ purpose, value, language });
