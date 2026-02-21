@@ -53,4 +53,72 @@ describe("SmartProgressiveStreamingHandler batch mode", () => {
     expect(updates.length).toBeGreaterThan(0);
     expect(updates[updates.length - 1]?.endsWith("final")).toBe(true);
   });
+
+  it("provides provisional words during incremental streaming", async () => {
+    const model = {
+      transcribe: async () => ({
+        text: "alpha beta",
+        words: [
+          { text: "alpha", start_time: 0, end_time: 1 },
+          { text: "beta", start_time: 1, end_time: 2 },
+        ],
+        latencySeconds: 0.05,
+        audioDurationSeconds: 2,
+        rtf: 20,
+      }),
+    };
+    const handler = new SmartProgressiveStreamingHandler(model, {
+      sampleRate: 10,
+      maxWindowSeconds: 15,
+      sentenceBufferSeconds: 2,
+    });
+
+    const partial = await handler.transcribeIncremental(new Float32Array(20));
+
+    expect(partial.isFinal).toBe(false);
+    expect(partial.words?.map((word) => word.text)).toEqual(["alpha", "beta"]);
+    expect(partial.words?.[0]?.start_time).toBe(0);
+    expect(partial.words?.[1]?.end_time).toBe(2);
+  });
+
+  it("streams cumulative timed words as batch windows finalize", async () => {
+    const sampleRate = 10;
+    const model = {
+      transcribe: async (audio: Float32Array) => {
+        const durationSeconds = audio.length / sampleRate;
+        const wholeSeconds = Math.floor(durationSeconds);
+        const words = Array.from({ length: wholeSeconds }, (_, index) => ({
+          text: `w${index}`,
+          start_time: index,
+          end_time: index + 1,
+        }));
+
+        return {
+          text: words.map((word) => word.text).join(" "),
+          words,
+          latencySeconds: 0.05,
+          audioDurationSeconds: durationSeconds,
+          rtf: 20,
+        };
+      },
+    };
+    const handler = new SmartProgressiveStreamingHandler(model, {
+      sampleRate,
+      maxWindowSeconds: 4,
+      sentenceBufferSeconds: 1,
+    });
+
+    const streamedWordCounts: number[] = [];
+    let finalWords: Array<{ text: string; start_time: number; end_time: number }> = [];
+    for await (const partial of handler.transcribeBatch(new Float32Array(90))) {
+      streamedWordCounts.push(partial.words?.length ?? 0);
+      if (partial.isFinal) {
+        finalWords = partial.words ?? [];
+      }
+    }
+
+    expect(streamedWordCounts).toEqual([4, 6, 8, 9]);
+    expect(finalWords[0]?.start_time).toBe(0);
+    expect(finalWords[finalWords.length - 1]?.end_time).toBe(9);
+  });
 });

@@ -8,6 +8,7 @@ It provides:
 - an information panel for managing CloverMarks
 - multilingual supplementing/translating text bodies
 - IIIF AnnotationPage export for session annotations
+- WEBVTT ingest/edit/export support for timed caption workflows
 - optional in-browser streaming speech-to-text for AV workflows using the Parakeet runtime and models
 
 ## Install
@@ -167,7 +168,7 @@ Common translation keys:
 - `scholiumLabel`, `scholiumComment`, `motivation`
 - `translationLanguage`, `translationText`, `translationAdd`, `translationDelete`
 - `drawingOn`, `drawingOff`, `drawingRectangle`, `drawingPolygon`
-- `exportAnnotations`, `exportNoAnnotations`, `exportSuccess`
+- `exportAnnotations`, `exportWebVtt`, `exportNoAnnotations`, `exportNoWebVtt`, `exportSuccess`, `exportWebVttSuccess`
 - `sttLoadModel`, `sttStartRecording`, `sttStartViewer`, `sttStartViewerFast`, `sttStopRecording`
 - `sttStatus`, `sttModelStateReady`, `sttStreamingError`, `sttViewerUnavailable`
 
@@ -179,8 +180,21 @@ Common translation keys:
 - Supports translation bodies with per-translation language codes
 - Supports quick-start viewer and microphone transcription workflows
 - Captures timed words from STT and supports timestamp seeking/editing
+- Supports WEBVTT cue parsing, timed-segment editing, and WEBVTT export
 - Exports current session annotations as a IIIF Presentation 3 AnnotationPage
 - Includes built-in English, French, and Spanish UI strings
+
+## WEBVTT Features
+
+- Reads WEBVTT from annotation `TextualBody` values when `format` is `text/vtt` or `text/webvtt`.
+- Reads remote WEBVTT references from `TextualBody.id` URLs (when `format` is WEBVTT) and fetches cue text in-browser.
+- Accepts timed-word JSON payloads (`schema: clover.parakeet.word_timestamps.v1`) and segments them into caption-length WEBVTT cues.
+- Parses cue identifiers and timing settings, ignores `NOTE` blocks, strips cue markup tags, and decodes common HTML entities.
+- Normalizes cue timings to millisecond precision for consistent parse/serialize round-trips.
+- Lets users edit timed segments in the panel regardless of whether storage began as JSON timed words or WEBVTT.
+- Writes edited timed segments back as WEBVTT cue text when the source body is WEBVTT-backed.
+- Exports all session timed segments as a single `clover-mark-annotations.vtt` file from the panel.
+- During native annotation-page sync, converts timed transcript bodies into segmented WEBVTT data-URI bodies and keeps external WEBVTT URLs when present.
 
 ## Development
 

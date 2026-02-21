@@ -1532,6 +1532,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
   const sttTranscriptionInFlightRef = React.useRef(false);
   const sttLiveAnnotationIdRef = React.useRef<string | null>(null);
   const sttLastCommittedTextRef = React.useRef("");
+  const sttLastPersistedTimedWordsSignatureRef = React.useRef("");
   const sttTargetAnnotationIdRef = React.useRef<string | null>(null);
   const sttTargetLanguageRef = React.useRef<string>("");
   const sttInputSourceRef = React.useRef<SttInputSource>("microphone");
@@ -1914,6 +1915,52 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     [annotator],
   );
 
+  const persistLiveTimedTranscriptWords = React.useCallback(
+    (
+      words: ParakeetWord[] | undefined,
+      mediaStartTime: number,
+      override?: { annotationId: string | null; language: string },
+    ): TimedTranscriptWord[] => {
+      const targetAnnotationId = override?.annotationId ?? sttTargetAnnotationIdRef.current;
+      const targetLanguage = override?.language ?? sttTargetLanguageRef.current;
+      if (!targetAnnotationId || !words || words.length === 0) {
+        return [];
+      }
+
+      const offsetSeconds = Number.isFinite(mediaStartTime) ? Math.max(0, mediaStartTime) : 0;
+      const normalizedWords = normalizeTimedTranscriptWords(
+        words.map((word) => ({
+          ...word,
+          start_time: word.start_time + offsetSeconds,
+          end_time: word.end_time + offsetSeconds,
+        })),
+      );
+      if (normalizedWords.length === 0) {
+        return [];
+      }
+
+      const lastWord = normalizedWords[normalizedWords.length - 1];
+      const previousWord = normalizedWords.length > 1
+        ? normalizedWords[normalizedWords.length - 2]
+        : undefined;
+      const signature = [
+        normalizedWords.length,
+        lastWord.start_time.toFixed(3),
+        lastWord.end_time.toFixed(3),
+        lastWord.text,
+        previousWord?.text ?? "",
+      ].join("|");
+      if (signature === sttLastPersistedTimedWordsSignatureRef.current) {
+        return normalizedWords;
+      }
+
+      persistTimedTranscriptWords(targetAnnotationId, normalizedWords, targetLanguage);
+      sttLastPersistedTimedWordsSignatureRef.current = signature;
+      return normalizedWords;
+    },
+    [persistTimedTranscriptWords],
+  );
+
   const ensureSttTargetAnnotationId = React.useCallback((): string | null => {
     if (!annotator || !activeCanvasId) {
       return null;
@@ -2035,29 +2082,11 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
         }
       }
 
-      if (finalize && sttBufferRef.current && sttHandlerRef.current) {
+      const sttHandler = sttHandlerRef.current;
+      if (finalize && sttBufferRef.current && sttHandler) {
         const finalAudio = sttBufferRef.current.getBuffer();
         if (finalAudio.length > PARAKEET_SAMPLE_RATE / 2) {
           try {
-            const transcriptionMode = sttTranscriptionModeRef.current;
-            const finalPartial =
-              transcriptionMode === "fast"
-                ? await sttHandlerRef.current.transcribeBatchLatest(finalAudio)
-                : null;
-            const finalText =
-              finalPartial !== null
-                ? mergeTranscriptionText(finalPartial.fixedText, finalPartial.activeText)
-                : await sttHandlerRef.current.finalize(finalAudio);
-            setSttFixedText(finalText);
-            setSttActiveText("");
-            setSttSessionDurationSeconds(finalAudio.length / PARAKEET_SAMPLE_RATE);
-            if (finalPartial?.metadata) {
-              setSttMetrics({
-                latencySeconds: finalPartial.metadata.latencySeconds,
-                rtf: finalPartial.metadata.rtf,
-              });
-            }
-
             const targetAnnotationId = sttTargetAnnotationIdRef.current;
             const targetLanguage = sttTargetLanguageRef.current;
             const inputSource = sttInputSourceRef.current;
@@ -2065,18 +2094,44 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
             const mediaStartTime = inputSource === "viewer"
               ? Math.max(0, sttMediaStartTimeRef.current ?? 0)
               : 0;
+            let finalText = "";
             let timedWords: TimedTranscriptWord[] = [];
 
-            if (targetAnnotationId) {
-              try {
-                const timingResult = await sttTranscriberRef.current?.transcribe(finalAudio, {
-                  timeOffsetSeconds: mediaStartTime,
+            for await (const partial of sttHandler.transcribeBatch(finalAudio)) {
+              finalText = mergeTranscriptionText(partial.fixedText, partial.activeText);
+              setSttFixedText(partial.fixedText);
+              setSttActiveText(partial.activeText);
+              setSttSessionDurationSeconds(partial.timestamp);
+              if (partial.metadata) {
+                setSttMetrics({
+                  latencySeconds: partial.metadata.latencySeconds,
+                  rtf: partial.metadata.rtf,
                 });
-                timedWords = normalizeTimedTranscriptWords(timingResult?.words);
-              } catch (error) {
-                console.error("Failed to build timed transcript words", error);
               }
 
+              if (targetAnnotationId) {
+                const streamedWords = persistLiveTimedTranscriptWords(
+                  partial.words,
+                  mediaStartTime,
+                  {
+                    annotationId: targetAnnotationId,
+                    language: targetLanguage,
+                  },
+                );
+                if (streamedWords.length > 0) {
+                  timedWords = streamedWords;
+                }
+              }
+            }
+
+            if (!finalText) {
+              finalText = await sttHandler.finalize(finalAudio);
+            }
+            setSttFixedText(finalText);
+            setSttActiveText("");
+            setSttSessionDurationSeconds(recordedAudioDurationSeconds);
+
+            if (targetAnnotationId) {
               if (timedWords.length === 0 && finalText.trim().length > 0) {
                 timedWords = buildApproximateTimedWordsFromText(
                   finalText,
@@ -2157,6 +2212,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
       sttFastHiddenDetachRef.current = null;
       sttFastHiddenElementRef.current = null;
       sttLastCommittedTextRef.current = "";
+      sttLastPersistedTimedWordsSignatureRef.current = "";
       setSttRecordingAnnotationId(null);
       setSttInputSource("microphone");
       setMicLevel(0);
@@ -2167,6 +2223,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
       annotator,
       appendSupplementingTranslationValue,
       commitLiveTranscription,
+      persistLiveTimedTranscriptWords,
       persistTimedTranscriptWords,
       t,
     ],
@@ -2281,6 +2338,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
       sttViewerMediaElementRef.current = null;
       sttViewerSyncDetachRef.current = null;
       sttLastCommittedTextRef.current = "";
+      sttLastPersistedTimedWordsSignatureRef.current = "";
 
       const buffer = new AudioChunkBuffer(PARAKEET_SAMPLE_RATE);
       sttBufferRef.current = buffer;
@@ -2347,6 +2405,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
                 fixedText: string;
                 activeText: string;
                 timestamp: number;
+                words?: ParakeetWord[];
                 metadata?: { latencySeconds: number; rtf: number };
               }) => {
                 setSttFixedText(partial.fixedText);
@@ -2365,6 +2424,11 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
                 if (targetAnnotationId && merged && merged !== sttLastCommittedTextRef.current) {
                   commitLiveTranscription(targetAnnotationId, merged, targetLanguage);
                 }
+
+                const mediaStartTime = sttInputSourceRef.current === "viewer"
+                  ? Math.max(0, sttMediaStartTimeRef.current ?? 0)
+                  : 0;
+                persistLiveTimedTranscriptWords(partial.words, mediaStartTime);
               };
 
               if (!hasHlsCandidate) {
@@ -2530,6 +2594,10 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
           if (targetAnnotationId && merged && merged !== sttLastCommittedTextRef.current) {
             commitLiveTranscription(targetAnnotationId, merged, targetLanguage);
           }
+          const mediaStartTime = sttInputSourceRef.current === "viewer"
+            ? Math.max(0, sttMediaStartTimeRef.current ?? 0)
+            : 0;
+          persistLiveTimedTranscriptWords(partial.words, mediaStartTime);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           setSttStatus(t("sttStreamingError", { message }));
@@ -2552,6 +2620,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     handleLoadSttModel,
     isRecordingStt,
     normalizedDefaultTranslationLanguage,
+    persistLiveTimedTranscriptWords,
     sttEnabled,
     sttLoadState,
     sttUpdateFrequencyMs,
@@ -2618,6 +2687,7 @@ export const CloverMarkPanel: React.FC<CloverMarkPanelProps> = ({
     setSttMetrics(null);
     setSttStatus("");
     setSttRecordingAnnotationId(null);
+    sttLastPersistedTimedWordsSignatureRef.current = "";
     setRemoteWebVttByBodyId({});
   }, [activeCanvasId]);
 

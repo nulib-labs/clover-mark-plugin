@@ -1,5 +1,6 @@
 import {
   PARAKEET_SAMPLE_RATE,
+  type ParakeetWord,
   type ParakeetTranscriptionResult,
   type ParakeetTranscriber,
 } from "./stt-parakeet";
@@ -9,6 +10,7 @@ export type PartialTranscription = {
   activeText: string;
   timestamp: number;
   isFinal: boolean;
+  words?: ParakeetWord[];
   metadata?: Pick<ParakeetTranscriptionResult, "latencySeconds" | "audioDurationSeconds" | "rtf">;
 };
 
@@ -284,6 +286,7 @@ export class SmartProgressiveStreamingHandler {
   private readonly sentenceBufferSeconds: number;
   private readonly sampleRate: number;
   private fixedSentences: string[] = [];
+  private fixedWords: ParakeetWord[] = [];
   private fixedEndTime = 0;
   private lastTranscribedLength = 0;
 
@@ -300,6 +303,7 @@ export class SmartProgressiveStreamingHandler {
 
   reset(): void {
     this.fixedSentences = [];
+    this.fixedWords = [];
     this.fixedEndTime = 0;
     this.lastTranscribedLength = 0;
   }
@@ -311,13 +315,16 @@ export class SmartProgressiveStreamingHandler {
         activeText: "",
         timestamp: audio.length / this.sampleRate,
         isFinal: false,
+        words: [...this.fixedWords],
       };
     }
 
     this.lastTranscribedLength = audio.length;
-    const startSamples = Math.floor(this.fixedEndTime * this.sampleRate);
+    const windowBaseTime = this.fixedEndTime;
+    const startSamples = Math.floor(windowBaseTime * this.sampleRate);
     const transcriptionWindow = audio.slice(startSamples);
     let result = await this.model.transcribe(transcriptionWindow);
+    let activeWindowBaseTime = windowBaseTime;
 
     const windowDuration = transcriptionWindow.length / this.sampleRate;
     if (windowDuration >= this.maxWindowSeconds && result.words.length > 0) {
@@ -329,18 +336,33 @@ export class SmartProgressiveStreamingHandler {
         if (lockableText) {
           this.fixedSentences.push(lockableText);
         }
+        this.fixedWords.push(
+          ...lockableWords.map((word) => ({
+            ...word,
+            start_time: windowBaseTime + word.start_time,
+            end_time: windowBaseTime + word.end_time,
+          })),
+        );
 
         this.fixedEndTime += lockableWords[lockableWords.length - 1].end_time;
         const nextStartSamples = Math.floor(this.fixedEndTime * this.sampleRate);
         result = await this.model.transcribe(audio.slice(nextStartSamples));
+        activeWindowBaseTime = this.fixedEndTime;
       }
     }
+
+    const activeWords = result.words.map((word) => ({
+      ...word,
+      start_time: activeWindowBaseTime + word.start_time,
+      end_time: activeWindowBaseTime + word.end_time,
+    }));
 
     return {
       fixedText: this.fixedSentences.join(" ").trim(),
       activeText: result.text.trim(),
       timestamp: audio.length / this.sampleRate,
       isFinal: false,
+      words: [...this.fixedWords, ...activeWords],
       metadata: {
         latencySeconds: result.latencySeconds,
         audioDurationSeconds: result.audioDurationSeconds,
@@ -387,6 +409,11 @@ export class SmartProgressiveStreamingHandler {
       const windowEndSamples = Math.floor(windowEnd * this.sampleRate);
       const audioWindow = audio.slice(windowStartSamples, windowEndSamples);
       const result = await this.model.transcribe(audioWindow);
+      const toAbsoluteWord = (word: ParakeetWord): ParakeetWord => ({
+        ...word,
+        start_time: windowStart + word.start_time,
+        end_time: windowStart + word.end_time,
+      });
 
       if (windowDuration >= this.maxWindowSeconds) {
         const cutoff = windowDuration - this.sentenceBufferSeconds;
@@ -397,6 +424,7 @@ export class SmartProgressiveStreamingHandler {
           if (fixedTextChunk) {
             this.fixedSentences.push(fixedTextChunk);
           }
+          this.fixedWords.push(...lockableWords.map(toAbsoluteWord));
 
           processedUpTo = windowStart + lockableWords[lockableWords.length - 1].end_time;
           if (processedUpTo <= windowStart) {
@@ -407,12 +435,16 @@ export class SmartProgressiveStreamingHandler {
             .map((word) => word.text)
             .join(" ")
             .trim();
+          const activeWords = result.words
+            .filter((word) => word.end_time >= cutoff)
+            .map(toAbsoluteWord);
 
           yield {
             fixedText: this.fixedSentences.join(" ").trim(),
             activeText,
             timestamp: windowEnd,
             isFinal: false,
+            words: [...this.fixedWords, ...activeWords],
             metadata: {
               latencySeconds: result.latencySeconds,
               audioDurationSeconds: result.audioDurationSeconds,
@@ -436,6 +468,7 @@ export class SmartProgressiveStreamingHandler {
           activeText: "",
           timestamp: windowEnd,
           isFinal: false,
+          words: [...this.fixedWords, ...result.words.map(toAbsoluteWord)],
           metadata: {
             latencySeconds: result.latencySeconds,
             audioDurationSeconds: result.audioDurationSeconds,
@@ -449,6 +482,7 @@ export class SmartProgressiveStreamingHandler {
       if (finalText) {
         this.fixedSentences.push(finalText);
       }
+      this.fixedWords.push(...result.words.map(toAbsoluteWord));
       processedUpTo = windowEnd;
 
       yield {
@@ -456,6 +490,7 @@ export class SmartProgressiveStreamingHandler {
         activeText: "",
         timestamp: windowEnd,
         isFinal: true,
+        words: [...this.fixedWords],
         metadata: {
           latencySeconds: result.latencySeconds,
           audioDurationSeconds: result.audioDurationSeconds,
